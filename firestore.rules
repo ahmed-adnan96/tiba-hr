@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email in [
+          'ahmed.adnan2023@gmail.com'
+        ];
+    }
+
+    
+    function isViewer() {
+      return request.auth != null
+        && request.auth.token.email in [
+          
+        ];
+    }
+
+    match /emps/{id}   { allow read: if isAdmin() || isViewer(); allow write: if isAdmin(); }
+    match /moves/{id}  { allow read: if isAdmin() || isViewer(); allow write: if isAdmin(); }
+    match /evals/{id}  { allow read: if isAdmin() || isViewer(); allow write: if isAdmin(); }
+    match /config/{id} { allow read: if isAdmin() || isViewer(); allow write: if isAdmin(); }
+
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}
