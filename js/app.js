@@ -108,7 +108,7 @@ function calcNet(eid,ym,scores,adj){
 }
 function evalOf(eid,ym){
   const e=emp(eid);if(!e||!e.evaluated)return null;
-  const r=S.evals[ym+'|'+eid];if(!r)return null;
+  const r=S.evals[ym+'|'+eid];if(!r||!Array.isArray(r.s))return null;
   return calcNet(eid,ym,r.s,r.adj);
 }
 const ymYear=()=>U.ym.split('-')[0];
@@ -190,8 +190,14 @@ function empRows(){
   const l=filteredEmps();
   if(!l.length)return `<div class="empty"><b>لا توجد نتائج</b>جرّب بحثاً آخر أو غيّر القسم.</div>`;
   return `<div class="list">${l.map(e=>{
-    const st=statusOf(metrics(e.id,U.ym)),m=missing(e);
-    return `<button class="row" data-act="openEmp" data-id="${e.id}"><div class="av">${esc(initial(e.name))}</div><div class="grow"><div class="t1">${esc(e.name)}</div><div class="t2">${esc(e.job||'—')} · ${esc(e.dept||'—')}</div></div><div class="end">${e.status!=='على رأس العمل'?`<span class="chip" data-k="warn">${esc(e.status)}</span>`:`<span class="chip" data-k="${st.k}">${st.t}</span>`}${m.length?`<div class="t2">⚠ بيانات ناقصة</div>`:''}</div></button>`;}).join('')}</div>`;
+    const st=statusOf(metrics(e.id,U.ym)),m=missing(e),ev=e.evaluated?evalOf(e.id,U.ym):null;
+    const statusChip=e.status!=='على رأس العمل'
+      ?`<span class="chip" data-k="warn">${esc(e.status)}</span>`
+      :`<span class="chip" data-k="${st.k}">${st.t}</span>`;
+    const evalChip=e.evaluated
+      ?(ev?`<span class="chip" data-k="${ev.grade.k}">${ev.grade.t} ${num(ev.net)}</span>`:`<span class="chip">لم يُقيَّم</span>`)
+      :'';
+    return `<button class="row" data-act="openEmp" data-id="${e.id}"><div class="av">${esc(initial(e.name))}</div><div class="grow"><div class="t1">${esc(e.name)}</div><div class="t2">${esc(e.job||'—')} · ${esc(e.dept||'—')}</div></div><div class="end">${statusChip}${evalChip}${m.length?`<div class="t2">⚠ بيانات ناقصة</div>`:''}</div></button>`;}).join('')}</div>`;
 }
 function vEmps(){
   const depts=[...new Set(S.emps.map(e=>e.dept).filter(Boolean))];
@@ -471,8 +477,8 @@ function saveMove(mid){
 let EV=null;
 function openEval(eid){
   const e=emp(eid),R=DATA.regs.criteria,ex=S.evals[U.ym+'|'+eid];
-  EV={eid,s:ex?ex.s.slice():R.map(()=>20),adj:ex?ex.adj:0,why:ex?ex.why||'':''};
-  openSheet(`تقييم ${e.name}`,`<p class="muted small">${ymLabel(U.ym)} — الدرجة من 20 لكل معيار</p>
+  EV={eid,s:(ex&&Array.isArray(ex.s)?ex.s:R.map(()=>20)).map(v=>Math.min(20,Math.max(0,+v||0))),adj:ex?+ex.adj||0:0,why:ex?ex.why||'':''};
+  openSheet(`تقييم ${e.name}`,`<p class="muted small">${ymLabel(U.ym)} — الدرجة من 20 لكل معيار · المحاكاة تحسب الخصومات والمكافآت فوراً</p>
     ${R.map((c,i)=>`<div class="crit"><div class="grow"><b>${esc(c[0])}</b></div><div class="step"><button data-act="stp" data-i="${i}" data-d="-1" aria-label="إنقاص">−</button><output id="cs${i}">${EV.s[i]}</output><button data-act="stp" data-i="${i}" data-d="1" aria-label="زيادة">+</button></div></div>`).join('')}
     <div class="two"><div class="field"><label for="e_adj">درجات تعديل (+/−)</label><input id="e_adj" data-in="evadj" type="number" step="0.5" value="${EV.adj}"></div><div class="field"><label for="e_why">سبب التعديل</label><input id="e_why" value="${esc(EV.why)}"></div></div>
     <div class="calc" id="evres"></div>`,
@@ -553,9 +559,19 @@ const A={
   sumF(el){U.sumF=el.dataset.k;render(true);},
   evalOpen(el){openEval(el.dataset.id);},
   stp(el){const i=+el.dataset.i,v=Math.min(20,Math.max(0,EV.s[i]+(+el.dataset.d)));EV.s[i]=v;$('#cs'+i).textContent=v;evRecalc();},
-  saveEval(){S.evals[U.ym+'|'+EV.eid]={s:EV.s.slice(),adj:+$('#e_adj').value||0,why:$('#e_why').value.trim()};save();closeSheet();toast('تم حفظ التقييم');render(true);},
+  saveEval(){
+    const key=U.ym+'|'+EV.eid;
+    S.evals[key]={s:EV.s.map(Number),adj:+$('#e_adj').value||0,why:$('#e_why').value.trim()};
+    save();
+    closeSheet();
+    toast('تم حفظ التقييم · '+grade(calcNet(EV.eid,U.ym,S.evals[key].s,S.evals[key].adj).net).t);
+    render(true);
+  },
   evalAll(){const l=active().filter(e=>e.evaluated&&!S.evals[U.ym+'|'+e.id]);if(!l.length){toast('كل الموظفين مُقيَّمون');return;}
-    confirmSheet('تقييم جماعي',`سيتم تقييم ${l.length} موظف بالدرجة الكاملة (200) عن ${ymLabel(U.ym)}، ويمكنك تعديل أي تقييم لاحقاً.`,'تأكيد',()=>{l.forEach(e=>{S.evals[U.ym+'|'+e.id]={s:DATA.regs.criteria.map(()=>20),adj:0,why:''};});save();render(true);toast('تم التقييم');});},
+    confirmSheet('تقييم جماعي',`سيتم تقييم ${l.length} موظف بالدرجة الكاملة (200) عن ${ymLabel(U.ym)}، ويمكنك تعديل أي تقييم لاحقاً.`,'تأكيد',()=>{
+      l.forEach(e=>{S.evals[U.ym+'|'+e.id]={s:DATA.regs.criteria.map(()=>20),adj:0,why:''};});
+      save();render(true);toast('تم التقييم الجماعي لـ '+l.length+' موظف');
+    });},
   saveSettings(){
     const g=id=>Math.max(0,parseFloat($(id).value)||0);
     S.set={grace:g('#s_grace'),latePt:g('#s_late'),penPt:g('#s_pen'),rewPt:g('#s_rew'),absPt:g('#s_abs')};

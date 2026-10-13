@@ -5,7 +5,9 @@ const SYNC={emps:{},moves:{},evals:{},config:''};
 const SCOLS=['emps','moves','evals','config'];
 const latest={},defd={};
 const stable=o=>o===null||typeof o!=='object'?JSON.stringify(o):Array.isArray(o)?'['+o.map(stable).join(',')+']':'{'+Object.keys(o).filter(k=>o[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+stable(o[k])).join(',')+'}';
-const evKey=k=>k.replace('|','_'),evBack=id=>id.replace('_','|');
+/* مفتاح آمن: YYYY-MM|eid → YYYY-MM_eid (ولو الـ id فيه _ مش بيتلخبط) */
+const evKey=k=>{const i=k.indexOf('|');return i<0?k:k.slice(0,i)+'_'+k.slice(i+1);};
+const evBack=id=>{const m=String(id).match(/^(\d{4}-\d{2})_(.+)$/);return m?m[1]+'|'+m[2]:id.replace('_','|');};
 const clone=o=>JSON.parse(JSON.stringify(o));
 const evObj=v=>({s:(v.s||[]).map(Number),adj:+v.adj||0,why:v.why||''});
 const byId=(a,b)=>a.id<b.id?-1:a.id>b.id?1:0;
@@ -66,8 +68,8 @@ function firstSync(){
     const dm={};L.moves.docs.forEach(d=>{dm[d.id]=clone(d.data());});
     const lm=mig?[]:S.moves.filter(m=>!(m.id in dm));
     S.moves=Object.values(dm).concat(lm);
-    const de={};L.evals.docs.forEach(d=>{de[evBack(d.id)]=evObj(d.data());});
-    if(!mig)Object.keys(S.evals).forEach(k=>{if(!(k in de))de[k]=S.evals[k];});
+    const de={};L.evals.docs.forEach(d=>{const k=evBack(d.id);if(k)de[k]=evObj(d.data());});
+    if(!mig)Object.keys(S.evals).forEach(k=>{if(!(k in de))de[k]=evObj(S.evals[k]);});
     S.evals=de;
     const cur=snapLocal();
     L.emps.docs.forEach(d=>{SYNC.emps[d.id]=cur.emps[d.id];});
@@ -93,7 +95,7 @@ function applyIncoming(col,snap){
     const data=clone(d.data());
     if(col==='emps'){const i=S.emps.findIndex(e=>e.id===id);if(i<0)S.emps.push(data);else S.emps[i]=data;}
     else if(col==='moves'){const i=S.moves.findIndex(m=>m.id===id);if(i<0)S.moves.push(data);else S.moves[i]=data;}
-    else S.evals[evBack(id)]=evObj(data);
+    else{const k=evBack(id);if(k)S.evals[k]=evObj(data);}
     applied.push(id);
   });
   if(col!=='config'){
@@ -101,7 +103,7 @@ function applyIncoming(col,snap){
       if(seen[id]||SYNC[col][id]!==local[col][id])return;
       if(col==='emps')S.emps=S.emps.filter(e=>e.id!==id);
       else if(col==='moves')S.moves=S.moves.filter(m=>m.id!==id);
-      else delete S.evals[evBack(id)];
+      else{const k=evBack(id);if(k)delete S.evals[k];}
       delete SYNC[col][id];
     });
     if(col==='emps')S.emps.sort(byId);
