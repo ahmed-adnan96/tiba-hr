@@ -36,7 +36,7 @@ function save(){
 }
 function showBanner(){
   const m=[];
-  if(!storageOK)m.push('تعذّر الحفظ التلقائي في هذا المتصفح. صدّر نسخة احتياطية من «الإعدادات» قبل الإغلاق.');
+  if(!storageOK)m.push('تعذّر الحفظ التلقائي في هذا المتصفح. نزّل نسخة احتياطية Excel من «الإعدادات» قبل الإغلاق.');
   if(SYNCSTATE==='ro')m.push('عرض فقط: لا تملك صلاحية تعديل البيانات المشتركة، فلن تُحفظ تعديلاتك.');
   if(SYNCSTATE==='err')m.push('تعذّرت المزامنة مؤقتاً، وستُعاد المحاولة تلقائياً.');
   $('#banner').innerHTML=m.map(x=>`<div class="banner">${x}</div>`).join('');
@@ -370,7 +370,15 @@ function vSettings(){
     <div class="sec"><h2>المظهر</h2><div class="chips" style="padding-top:0">${[['auto','تلقائي'],['light','فاتح'],['dark','داكن']].map(t=>`<button class="fchip" aria-pressed="${S.theme===t[0]}" data-act="theme" data-t="${t[0]}">${t[1]}</button>`).join('')}</div></div>
     <div class="sec"><h2>النسخ الاحتياطي والتصدير</h2>
       <p class="small muted" style="margin-bottom:8px">${syncText()}</p>
-      <div class="actions" style="margin-top:0"><button class="btn ghost" data-act="exportAll">تصدير Excel</button><button class="btn ghost" data-act="backup">نسخة احتياطية</button><button class="btn ghost" data-act="restore">استعادة نسخة</button></div></div>
+      <p class="small muted" style="margin-bottom:8px">النسخة الاحتياطية: ملف Excel كامل. استيراد الموظفين: ارفع شيت Excel فيه عمود الاسم (وباقي البيانات إن وجدت).</p>
+      <div class="actions" style="margin-top:0"><button class="btn ghost" data-act="exportAll">تصدير الشهر الحالي</button><button class="btn" data-act="backup">نسخة احتياطية Excel</button><button class="btn" data-act="restore">استيراد موظفين من Excel</button></div></div>
+    <div class="sec"><h2>تغيير كلمة المرور</h2><div class="card" style="padding-bottom:14px">
+      <div class="field"><label for="pw_cur">كلمة المرور الحالية</label><input id="pw_cur" type="password" autocomplete="current-password" dir="ltr"></div>
+      <div class="field"><label for="pw_new">كلمة المرور الجديدة</label><input id="pw_new" type="password" autocomplete="new-password" dir="ltr"></div>
+      <div class="field"><label for="pw_new2">تأكيد كلمة المرور الجديدة</label><input id="pw_new2" type="password" autocomplete="new-password" dir="ltr"></div>
+      <button class="btn block" style="margin-top:10px" data-act="changePass">حفظ كلمة المرور الجديدة</button>
+      <p class="small muted" style="margin-top:8px">أو من شاشة الدخول استخدم «نسيت كلمة المرور؟» ليصلك رابط على البريد.</p>
+    </div></div>
     <div class="sec"><h2>الحساب</h2><button class="btn ghost block" onclick="window.__logout&&window.__logout()">تسجيل الخروج</button></div>
     <div class="sec"><h2>إعادة الضبط</h2><button class="btn danger block" data-act="resetAll">العودة لبيانات ملف الإكسل الأصلية</button></div>
   </main>`;
@@ -522,6 +530,29 @@ function csv(rows){
   const q=v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`;
   return '\ufeff'+[h.map(q).join(',')].concat(rows.map(r=>h.map(k=>q(r[k])).join(','))).join('\r\n');
 }
+function evalRows(){
+  const rows=[];
+  Object.keys(S.evals).sort().forEach(k=>{
+    const p=k.split('|'),ym=p[0],eid=p[1],e=emp(eid),r=S.evals[k];
+    if(!e||!r||!Array.isArray(r.s))return;
+    const c=calcNet(eid,ym,r.s,r.adj);
+    const row={'الشهر':ym,'كود الموظف':eid,'الموظف':e.name,'القسم':e.dept||'','الصافي':c.net,'التقدير':c.grade.t,'تعديل':r.adj||0,'سبب التعديل':r.why||''};
+    DATA.regs.criteria.forEach((cr,i)=>{row[cr[0]]=r.s[i];});
+    rows.push(row);
+  });
+  return rows;
+}
+function settingsRows(){
+  const st=S.set;
+  return [
+    {'البند':'حد السماح بالتأخير (ساعة)','القيمة':st.grace},
+    {'البند':'خصم كل ساعة تأخير زائدة','القيمة':st.latePt},
+    {'البند':'خصم كل يوم جزاء','القيمة':st.penPt},
+    {'البند':'إضافة كل يوم مكافأة','القيمة':st.rewPt},
+    {'البند':'خصم كل يوم غياب','القيمة':st.absPt},
+    ...S.types.map(t=>({'البند':'افتراضي: '+t.name+' ('+t.unit+')','القيمة':t.def}))
+  ];
+}
 function exportAll(){
   const {E,M}=sheetRows(),mr=monthRows(U.ym);
   if(window.XLSX)dl(`hr-export-${U.ym}.xlsx`,mkBook([['الموظفون',E],['الحركات',M],['مجمع '+ymLabel(U.ym),mr]]));
@@ -531,6 +562,17 @@ function exportMonth(){
   const mr=monthRows(U.ym);
   if(window.XLSX)dl(`hr-summary-${U.ym}.xlsx`,mkBook([['المجمع',mr]]));
   else dl(`hr-summary-${U.ym}.csv`,csv(mr));
+}
+function backupExcel(){
+  const {E,M}=sheetRows(),Ev=evalRows(),St=settingsRows();
+  const name=`hr-backup-${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}.xlsx`;
+  if(window.XLSX){
+    dl(name,mkBook([['الموظفون',E],['الحركات',M],['التقييمات',Ev],['الإعدادات',St]]));
+    toast('تم تنزيل النسخة الاحتياطية (Excel)');
+  }else{
+    dl(name.replace('.xlsx','.csv'),csv(E));
+    toast('تم تنزيل الموظفين (CSV)');
+  }
 }
 
 /* ---------- actions ---------- */
@@ -579,8 +621,26 @@ const A={
     save();toast('تم حفظ الإعدادات');
   },
   theme(el){S.theme=el.dataset.t;applyTheme();save();render(true);},
+  async changePass(){
+    const cur=$('#pw_cur')?.value||'', n1=$('#pw_new')?.value||'', n2=$('#pw_new2')?.value||'';
+    if(!cur){toast('اكتب كلمة المرور الحالية');return;}
+    if(n1.length<6){toast('كلمة المرور الجديدة 6 أحرف على الأقل');return;}
+    if(n1!==n2){toast('تأكيد كلمة المرور غير متطابق');return;}
+    if(!window.__changePassword){toast('غير متاح حالياً');return;}
+    try{
+      await window.__changePassword(cur,n1);
+      $('#pw_cur').value='';$('#pw_new').value='';$('#pw_new2').value='';
+      toast('تم تغيير كلمة المرور بنجاح');
+    }catch(e){
+      const c=e&&e.code;
+      if(c==='auth/wrong-password'||c==='auth/invalid-credential')toast('كلمة المرور الحالية غير صحيحة');
+      else if(c==='auth/weak-password')toast('كلمة المرور ضعيفة جداً');
+      else if(c==='auth/requires-recent-login')toast('أعد تسجيل الدخول ثم غيّر كلمة المرور');
+      else toast('تعذّر تغيير كلمة المرور');
+    }
+  },
   exportAll,exportMonth,
-  backup(){dl(`hr-backup-${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}.json`,JSON.stringify(S));},
+  backup:backupExcel,
   restore(){$('#restoreFile').value='';$('#restoreFile').click();},
   resetAll(){confirmSheet('إعادة الضبط','سيتم مسح كل الحركات والتقييمات وأي تعديلات على بيانات الموظفين، والعودة للبيانات الأصلية من ملف الإكسل.','مسح وإعادة ضبط',()=>{S=seed();save();applyTheme();render();toast('تمت إعادة الضبط');});}
 };
@@ -595,10 +655,105 @@ document.addEventListener('input',e=>{
   else if(k==='penq'){const q=e.target.value.trim();document.querySelectorAll('#penlist .rule').forEach(r=>{r.style.display=!q||r.dataset.s.includes(q)?'':'none';});}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+function normHeader(h){
+  return String(h||'').replace(/\s+/g,' ').trim();
+}
+function pick(row,keys){
+  for(const k of keys){
+    let v=row[k];
+    if(v==null||v==='')continue;
+    if(v instanceof Date&&!isNaN(v))return v.toISOString().slice(0,10);
+    v=String(v).trim();if(v)return v;
+  }
+  return '';
+}
+function rowToEmp(row,idx){
+  const name=pick(row,['الاسم','اسم الموظف','الموظف','name','Name','NAME']);
+  if(!name)return null;
+  const id=pick(row,['الكود','كود الموظف','الرقم','id','ID','Id'])||('EMP-'+pad(idx+1));
+  const insuredRaw=pick(row,['التأمين','مؤمن','insured']);
+  const insured=/مؤمن|نعم|true|1|yes/i.test(insuredRaw)&&!/غير/.test(insuredRaw);
+  const evaluatedRaw=pick(row,['يخضع للتقييم','التقييم','evaluated']);
+  const evaluated=evaluatedRaw===''?true:!/لا|false|0|no/i.test(evaluatedRaw);
+  return {
+    id,name,
+    job:pick(row,['الوظيفة','المسمى الوظيفي','job','Job']),
+    dept:pick(row,['القسم','الإدارة','dept','Department']),
+    hire:pick(row,['تاريخ التعيين','التعيين','hire','Hire Date']),
+    leave:parseFloat(pick(row,['رصيد الإجازة','الإجازة','leave']))||21,
+    schedule:pick(row,['جدول العمل','الجدول','schedule'])||'جدول ثابت',
+    hours:pick(row,['مواعيد الدوام','مواعيد العمل','hours'])||'',
+    insured,insDate:pick(row,['تاريخ التأمين','insDate']),
+    daily:parseFloat(pick(row,['ساعات العمل','ساعات العمل اليومية','daily']))||8,
+    term:pick(row,['مدة التوظيف','term'])||'دائم',
+    gender:pick(row,['النوع','الجنس','gender']),
+    birth:pick(row,['تاريخ الميلاد','الميلاد','birth']),
+    phone:pick(row,['الهاتف','التليفون','الموبايل','phone','Phone']),
+    nid:pick(row,['الرقم القومي','الرقم القومى','nid','National ID']).replace(/\s/g,''),
+    marital:pick(row,['الحالة الاجتماعية','marital']),
+    address:pick(row,['العنوان','address']),
+    center:pick(row,['المركز','المحافظة','center']),
+    qual:pick(row,['المؤهل','المؤهل الدراسي','qual']),
+    edu:pick(row,['درجة التعليم','edu']),
+    status:pick(row,['حالة العمل','الحالة','status'])||'على رأس العمل',
+    evaluated,notes:pick(row,['ملاحظات','notes'])
+  };
+}
+function importEmpsFromRows(rows){
+  const list=[];
+  rows.forEach((row,i)=>{const e=rowToEmp(row,list.length);if(e)list.push(e);});
+  return list;
+}
+function applyEmpImport(list,mode){
+  if(mode==='replace'){
+    S.emps=list;
+  }else{
+    const byId={},byName={};
+    S.emps.forEach(e=>{byId[e.id]=e;byName[e.name]=e;});
+    list.forEach(ne=>{
+      const old=byId[ne.id]||byName[ne.name];
+      if(old){Object.keys(ne).forEach(k=>{if(ne[k]!==''&&ne[k]!=null)old[k]=ne[k];});}
+      else S.emps.push(ne);
+    });
+  }
+  save();render();toast('تم استيراد '+list.length+' موظف');
+}
 $('#restoreFile').addEventListener('change',e=>{
-  const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  const f=e.target.files[0];if(!f)return;
+  const name=(f.name||'').toLowerCase();
+  const isExcel=/\.xlsx?$|\.csv$/.test(name)||/sheet|excel|csv/.test(f.type||'');
+  if(isExcel){
+    if(!window.XLSX){toast('مكتبة Excel غير متاحة');return;}
+    const r=new FileReader();
+    r.onload=()=>{
+      try{
+        const wb=XLSX.read(r.result,{type:'array',cellDates:true});
+        const sheetName=wb.SheetNames.find(n=>/موظف|emp/i.test(n))||wb.SheetNames[0];
+        const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{defval:''});
+        const list=importEmpsFromRows(rows);
+        if(!list.length){toast('لم يُعثر على أسماء موظفين في الشيت');return;}
+        confirmSheet('استيراد موظفين من Excel',
+          `تم العثور على ${list.length} موظف في الملف «${f.name}».\n\n• استبدال: مسح الموظفين الحاليين ووضع اللي في الشيت.\n• دمج: إضافة الجديد وتحديث الموجود بنفس الاسم أو الكود.`,
+          'استبدال الكل',
+          ()=>applyEmpImport(list,'replace'));
+        // second button via pending trick: show merge as extra - use confirm then offer merge in toast path
+        setTimeout(()=>{
+          const foot=$('#sheetRoot footer');
+          if(foot&&!foot.querySelector('[data-act="importMerge"]')){
+            const b=document.createElement('button');
+            b.className='btn ghost';b.dataset.act='importMerge';b.textContent='دمج مع الحالي';
+            b.onclick=()=>{pending=null;closeSheet();applyEmpImport(list,'merge');};
+            foot.insertBefore(b,foot.firstChild);
+          }
+        },0);
+      }catch(x){toast('تعذّر قراءة ملف Excel');}
+    };
+    r.readAsArrayBuffer(f);
+    return;
+  }
+  const r=new FileReader();
   r.onload=()=>{try{const o=JSON.parse(r.result);if(!o||!Array.isArray(o.emps)||!Array.isArray(o.moves)||!Array.isArray(o.types))throw 0;
-    confirmSheet('استعادة نسخة احتياطية',`سيتم استبدال كل البيانات الحالية بالنسخة المختارة (${o.emps.length} موظف، ${o.moves.length} حركة).`,'استعادة',()=>{S=o;save();applyTheme();render();toast('تمت الاستعادة');});
-  }catch(x){toast('الملف ليس نسخة احتياطية صالحة');}};
+    confirmSheet('استعادة نسخة فنية',`سيتم استبدال كل البيانات الحالية (${o.emps.length} موظف، ${o.moves.length} حركة).`,'استعادة',()=>{S=o;save();applyTheme();render();toast('تمت الاستعادة');});
+  }catch(x){toast('الملف ليس Excel ولا نسخة JSON صالحة');}};
   r.readAsText(f);
 });

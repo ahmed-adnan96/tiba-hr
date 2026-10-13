@@ -11,18 +11,27 @@
   <link rel="stylesheet" href="css/style.css">
  </head>
  <body>
-  <div id="login"><form class="box" id="loginForm">
+  <div id="boot" aria-live="polite" aria-busy="true">
+    <div class="boot-inner">
+      <div class="boot-ring" aria-hidden="true"></div>
+      <div class="boot-title">مركز طيبة التخصصي للعيون</div>
+      <div class="boot-sub">جاري تحميل منظومة الموارد البشرية...</div>
+    </div>
+  </div>
+  <div id="login" style="display:none"><form class="box" id="loginForm">
   <h1>مركز طيبة التخصصي للعيون</h1><p>منظومة الموارد البشرية — تسجيل الدخول</p>
   <div class="field"><label for="lg_email">البريد الإلكتروني</label><input id="lg_email" type="email" autocomplete="username" required dir="ltr"></div>
   <div class="field"><label for="lg_pass">كلمة المرور</label><input id="lg_pass" type="password" autocomplete="current-password" required dir="ltr"></div>
   <button class="btn block" style="margin-top:14px" type="submit">دخول</button>
+  <button class="btn ghost block" type="button" id="lg_forgot" style="margin-top:8px">نسيت كلمة المرور؟</button>
   <div class="err" id="lg_err" role="alert"></div>
+  <div class="okmsg" id="lg_ok" role="status"></div>
 </form></div>
 <div id="banner"></div>
   <div id="app"></div>
   <div id="sheetRoot"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+  <input type="file" id="restoreFile" accept=".xlsx,.xls,.csv,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" hidden>
   <script src="js/data.js"></script>
   <script src="js/app.js"></script>
   <script src="js/sync.js"></script>

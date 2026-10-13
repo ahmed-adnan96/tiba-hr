@@ -177,3 +177,14 @@ details[open] summary::after{transform:rotate(90deg)}
 #login .box{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;width:100%;max-width:380px}
 #login h1{font-size:19px;margin-bottom:2px} #login p{color:var(--muted);font-size:13px;margin-bottom:6px}
 #login .err{color:var(--bad);font-size:13px;min-height:20px;margin-top:8px}
+
+/* boot loader */
+#boot{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px;transition:opacity .35s ease,visibility .35s ease}
+#boot.hide{opacity:0;visibility:hidden;pointer-events:none}
+.boot-inner{text-align:center;max-width:280px}
+.boot-ring{width:52px;height:52px;margin:0 auto 18px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--brand);animation:bootspin .8s linear infinite}
+.boot-title{font-weight:800;font-size:17px;margin-bottom:6px}
+.boot-sub{color:var(--muted);font-size:13px}
+@keyframes bootspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.boot-ring{animation:none;border-top-color:var(--brand)}}
+#login .okmsg{color:var(--ok);font-size:13px;min-height:20px;margin-top:8px}

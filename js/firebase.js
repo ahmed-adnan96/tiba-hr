@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { getFirestore, doc, collection, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 /* >>> الصق هنا إعدادات مشروعك من Firebase Console (Project settings > Your apps > Web) <<< */
@@ -27,14 +27,48 @@ const adapter = {
 window.claude = { use: async k => (k === 'db' ? adapter : null) };
 window.__logout = () => { try { localStorage.removeItem('teba_hr_v1'); localStorage.removeItem('teba_hr_mig'); } catch (e) {} signOut(auth).then(() => location.reload()); };
 
-const L = document.getElementById('login'), err = document.getElementById('lg_err');
+window.__changePassword = async (currentPass, newPass) => {
+  const u = auth.currentUser;
+  if (!u || !u.email) throw new Error('not-signed-in');
+  const cred = EmailAuthProvider.credential(u.email, currentPass);
+  await reauthenticateWithCredential(u, cred);
+  await updatePassword(u, newPass);
+};
+
+const boot = document.getElementById('boot');
+const L = document.getElementById('login'), err = document.getElementById('lg_err'), ok = document.getElementById('lg_ok');
+const hideBoot = () => { if (boot) { boot.classList.add('hide'); setTimeout(() => boot.remove(), 400); } };
+
 document.getElementById('loginForm').addEventListener('submit', async ev => {
-  ev.preventDefault(); err.textContent = '';
+  ev.preventDefault(); err.textContent = ''; if (ok) ok.textContent = '';
   try { await signInWithEmailAndPassword(auth, lg_email.value.trim(), lg_pass.value); }
   catch (e) { err.textContent = 'البريد أو كلمة المرور غير صحيحة.'; }
 });
+
+document.getElementById('lg_forgot').addEventListener('click', async () => {
+  err.textContent = ''; if (ok) ok.textContent = '';
+  const email = (lg_email.value || '').trim();
+  if (!email) { err.textContent = 'اكتب البريد الإلكتروني أولاً ثم اضغط نسيت كلمة المرور.'; return; }
+  try {
+    await sendPasswordResetEmail(auth, email);
+    if (ok) ok.textContent = 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك. افحص الوارد (والرسائل غير المرغوب فيها).';
+  } catch (e) {
+    const c = e && e.code;
+    if (c === 'auth/user-not-found') err.textContent = 'لا يوجد حساب بهذا البريد.';
+    else if (c === 'auth/invalid-email') err.textContent = 'صيغة البريد غير صحيحة.';
+    else if (c === 'auth/too-many-requests') err.textContent = 'محاولات كثيرة، حاول بعد قليل.';
+    else err.textContent = 'تعذّر إرسال الرابط. تأكد من البريد وحاول مرة أخرى.';
+  }
+});
+
 let booted = false;
 onAuthStateChanged(auth, u => {
-  if (u) { L.style.display = 'none'; if (!booted) { booted = true; window.__boot && window.__boot(); } }
-  else { L.style.display = 'flex'; }
+  if (u) {
+    L.style.display = 'none';
+    hideBoot();
+    if (!booted) { booted = true; window.__boot && window.__boot(); }
+  } else {
+    hideBoot();
+    L.style.display = 'flex';
+  }
 });
